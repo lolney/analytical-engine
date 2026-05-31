@@ -56,6 +56,7 @@ const fields = [
 
 const els = {
   deck: document.querySelector("#deck-input"),
+  back: document.querySelector("#back"),
   step: document.querySelector("#step"),
   run: document.querySelector("#run"),
   reset: document.querySelector("#reset"),
@@ -82,6 +83,7 @@ let lastMechanism = {
   summary: "Execute a card to see the reader, barrels, axes, figure wheels, and card chain.",
   ticks: [],
 };
+let history = [];
 
 function escapeHtml(value) {
   return String(value)
@@ -111,7 +113,24 @@ function resetState() {
       "Execute a card to see the reader, barrels, axes, figure wheels, and card chain.",
     ticks: [],
   };
+  history = [];
   render();
+}
+
+function captureSnapshot() {
+  return {
+    state: structuredClone(state),
+    previousState: structuredClone(previousState),
+    lastInstruction,
+    lastMechanism: structuredClone(lastMechanism),
+  };
+}
+
+function restoreSnapshot(snapshot) {
+  state = structuredClone(snapshot.state);
+  previousState = structuredClone(snapshot.previousState);
+  lastInstruction = snapshot.lastInstruction;
+  lastMechanism = structuredClone(snapshot.lastMechanism);
 }
 
 function readMachineSummary(programState) {
@@ -747,6 +766,7 @@ function render() {
       : "Ready";
   els.step.disabled = state.halted || outOfDeck;
   els.run.disabled = state.halted || outOfDeck;
+  els.back.disabled = history.length === 0;
   renderMetrics();
   renderDiff();
   renderStore();
@@ -761,6 +781,7 @@ function executeStep() {
     return false;
   }
 
+  const snapshot = captureSnapshot();
   previousState = structuredClone(state);
   const card = cards[state.pointer];
   try {
@@ -770,6 +791,7 @@ function executeStep() {
     state = result.state;
     lastInstruction = `${result.instruction}  ->  ${result.advance}`;
     lastMechanism = result.mechanism;
+    history.push(snapshot);
     render();
     return true;
   } catch (error) {
@@ -779,6 +801,17 @@ function executeStep() {
     els.run.disabled = true;
     return false;
   }
+}
+
+function goBack() {
+  const snapshot = history.pop();
+  if (!snapshot) {
+    render();
+    return false;
+  }
+  restoreSnapshot(snapshot);
+  render();
+  return true;
 }
 
 function runUntilStop() {
@@ -814,6 +847,9 @@ function handleHotkey(event) {
   if (event.key === "ArrowRight") {
     event.preventDefault();
     executeStep();
+  } else if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    goBack();
   } else if (event.key.toLowerCase() === "r") {
     event.preventDefault();
     resetState();
@@ -825,6 +861,7 @@ async function main() {
   els.deck.value = examples.sum;
   resetState();
 
+  els.back.addEventListener("click", goBack);
   els.step.addEventListener("click", executeStep);
   els.run.addEventListener("click", runUntilStop);
   els.reset.addEventListener("click", resetState);
