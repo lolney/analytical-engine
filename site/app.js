@@ -829,6 +829,7 @@ async function main() {
   els.run.addEventListener("click", runUntilStop);
   els.reset.addEventListener("click", resetState);
   document.addEventListener("keydown", handleHotkey);
+  window.addEventListener("keydown", handleHotkey);
   els.loadSum.addEventListener("click", () => {
     els.deck.value = examples.sum;
     resetState();
