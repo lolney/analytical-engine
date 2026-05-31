@@ -278,25 +278,37 @@ button:disabled {
 }
 
 .mechanism-summary {
+  position: relative;
   min-height: 42px;
   margin-bottom: 12px;
-  padding: 10px;
-  border: 1px solid var(--line);
+  padding: 11px 12px 11px 46px;
+  border: 1px solid #8db6b0;
   border-radius: 6px;
-  background: #fbfcfd;
+  background: #eef8f5;
   color: var(--steel);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 700;
   line-height: 1.35;
 }
 
-.machine-map {
+.mechanism-summary::before {
+  content: "i";
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  width: 22px;
+  height: 22px;
   display: grid;
-  grid-template-columns: repeat(6, minmax(70px, 1fr));
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 14px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  color: #ffffff;
+  font-family: Georgia, serif;
+  font-weight: 900;
+  transform: translateY(-50%);
 }
 
+.machine-map,
 .machine-link {
   display: none;
 }
@@ -1689,4 +1701,413 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+}
+
+/* Reference-plate pass: keep the trace as one coherent illustration, not cards. */
+.machine-plate {
+  border-color: #8f8878;
+  border-radius: 8px;
+  padding: 18px;
+  background:
+    radial-gradient(circle at 50% 38%, #fffdf7 0 22%, transparent 54%),
+    linear-gradient(180deg, #fbf4e5 0%, #fffaf0 100%);
+}
+
+.trace-annotations {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 18px;
+  margin: 0 0 18px;
+}
+
+.trace-callout {
+  min-height: auto;
+  padding: 12px;
+  background: #fffaf0f2;
+}
+
+.trace-callout::after {
+  display: none;
+}
+
+.callout-index {
+  width: 30px;
+  height: 30px;
+}
+
+.callout-state {
+  background: #fffdf6;
+}
+
+.mechanism-stage {
+  min-height: 560px;
+  border: 0;
+  background:
+    linear-gradient(180deg, transparent 0 71%, #8b806b 71% 73%, transparent 73%),
+    linear-gradient(90deg, #efe6d2 0 100%);
+  background-size: 100% 100%, 100% 1px;
+  background-repeat: no-repeat, repeat-x;
+  background-position: 0 0, 0 70%;
+}
+
+.mechanism-stage::before {
+  left: -2%;
+  right: -2%;
+  top: 42%;
+  height: 30px;
+  border-top-width: 7px;
+  border-bottom-width: 7px;
+}
+
+.mechanism-stage::after {
+  left: 15%;
+  right: 22%;
+  bottom: 170px;
+}
+
+.machine-piece {
+  z-index: 3;
+  opacity: 0.86;
+}
+
+.machine-piece.chain-left {
+  left: 1%;
+  top: 34%;
+  width: 140px;
+  height: 170px;
+}
+
+.machine-piece.reader {
+  left: 23%;
+  top: 28%;
+  width: 128px;
+  height: 218px;
+}
+
+.machine-piece.axis {
+  left: 42%;
+  top: 36%;
+  width: 106px;
+  height: 190px;
+}
+
+.machine-piece.barrel {
+  left: 50%;
+  top: 28%;
+  width: 110px;
+  height: 216px;
+}
+
+.machine-piece.mill {
+  left: 63%;
+  top: 32%;
+  width: 124px;
+  height: 206px;
+}
+
+.machine-piece.store {
+  left: 77%;
+  top: 34%;
+  width: 104px;
+  height: 190px;
+}
+
+.punched-card-large {
+  left: 19%;
+  top: 23%;
+  width: 158px;
+  z-index: 4;
+}
+
+.sprocket {
+  right: 15%;
+  top: 38%;
+  z-index: 4;
+}
+
+.index-strip {
+  right: 2%;
+  top: 57%;
+  z-index: 5;
+}
+
+.chain-direction {
+  left: 2%;
+  top: 35%;
+}
+
+.machine-label {
+  z-index: 6;
+  max-width: 130px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: #fffaf0d9;
+}
+
+.machine-label::before {
+  display: none;
+}
+
+.machine-label.feelers {
+  left: 2%;
+  top: 56%;
+  width: auto;
+}
+
+.machine-label.selector {
+  left: 49%;
+  top: 62%;
+}
+
+.machine-label.pawl {
+  left: 62%;
+  top: 22%;
+  width: auto;
+}
+
+.machine-label.pointer {
+  right: 4%;
+  top: 67%;
+}
+
+.emulator-panel {
+  left: 0;
+  bottom: 2px;
+  width: min(420px, 47%);
+}
+
+.emulator-panel table {
+  width: 70%;
+}
+
+.trace-footer {
+  margin-top: 14px;
+  border-color: #8f8878;
+  background: #fff8e7;
+}
+
+@container (max-width: 760px) {
+  .mechanism-stage {
+    min-height: 660px;
+  }
+
+  .emulator-panel {
+    width: 100%;
+  }
+
+  .machine-label {
+    display: none;
+  }
+}
+
+/* Review pass: stronger anchoring and readable annotation/state text. */
+.trace-annotations {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.trace-callout {
+  padding: 13px;
+}
+
+.trace-callout::after {
+  display: none;
+  bottom: -23px;
+  height: 23px;
+  width: 2px;
+}
+
+.trace-callout::before {
+  content: none;
+  position: absolute;
+  left: calc(50% - 4px);
+  bottom: -28px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-strong);
+}
+
+.trace-callout.target-reader::after,
+.trace-callout.target-reader::before {
+  left: 52%;
+}
+
+.trace-callout.target-reader::after {
+  bottom: -138px;
+  height: 138px;
+}
+
+.trace-callout.target-reader::before {
+  bottom: -143px;
+}
+
+.trace-callout.target-axes::after {
+  bottom: -116px;
+  height: 116px;
+}
+
+.trace-callout.target-axes::before {
+  bottom: -121px;
+}
+
+.trace-callout.target-mill::after {
+  display: none;
+}
+
+.trace-callout.target-mill::before {
+  display: none;
+}
+
+.trace-callout.target-runup::after {
+  bottom: -176px;
+  height: 176px;
+}
+
+.trace-callout.target-runup::before {
+  bottom: -181px;
+}
+
+.trace-callout.target-chain::after {
+  bottom: -126px;
+  height: 126px;
+}
+
+.trace-callout.target-chain::before {
+  bottom: -131px;
+}
+
+.trace-callout strong,
+.callout-state b {
+  font-size: 13px;
+}
+
+.trace-callout p {
+  font-size: 12px;
+  line-height: 1.32;
+}
+
+.callout-state .machine-readout-row {
+  font-size: 11px;
+}
+
+.mechanism-stage {
+  min-height: 510px;
+}
+
+.mechanism-stage::before {
+  top: 34%;
+}
+
+.mechanism-stage::after {
+  bottom: 160px;
+}
+
+.machine-piece.chain-left {
+  top: 27%;
+}
+
+.machine-piece.reader {
+  top: 18%;
+}
+
+.machine-piece.axis {
+  top: 29%;
+}
+
+.machine-piece.barrel {
+  top: 19%;
+}
+
+.machine-piece.mill {
+  top: 25%;
+}
+
+.machine-piece.store {
+  top: 27%;
+}
+
+.punched-card-large {
+  top: 12%;
+}
+
+.sprocket {
+  top: 31%;
+}
+
+.index-strip {
+  top: 50%;
+}
+
+.chain-direction {
+  top: 28%;
+}
+
+.machine-label::before {
+  display: none;
+}
+
+.machine-label.feelers {
+  left: 1%;
+  top: 43%;
+  width: 150px;
+  white-space: nowrap;
+}
+
+.machine-label.feelers::before {
+  left: 104px;
+  top: 7px;
+  width: 34px;
+  border-top: 2px solid;
+}
+
+.machine-label.selector {
+  left: 45%;
+  top: 67%;
+}
+
+.machine-label.selector::before {
+  left: 8px;
+  bottom: 22px;
+  height: 58px;
+  border-left: 2px solid;
+}
+
+.machine-label.pawl {
+  left: 66%;
+  top: 20%;
+}
+
+.machine-label.pawl::before {
+  left: 26px;
+  top: 24px;
+  height: 92px;
+  border-left: 2px solid;
+}
+
+.machine-label.pointer {
+  top: 64%;
+}
+
+.machine-label.pointer::before {
+  right: 48px;
+  bottom: 25px;
+  height: 58px;
+  border-left: 2px solid;
+}
+
+.emulator-panel {
+  width: min(390px, 43%);
+}
+
+.emulator-panel table {
+  width: 100%;
+}
+
+.emulator-panel p {
+  position: static;
+  width: auto;
+  margin: 7px 0 0;
+  font-size: 11px;
+  line-height: 1.3;
 }

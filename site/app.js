@@ -589,7 +589,7 @@ function annotationTarget(kind) {
 function mechanicalStateRows(tick) {
   const wheels = wheelRows(tick);
   if (wheels.length) {
-    return wheels.slice(0, 4);
+    return wheels.slice(0, 3);
   }
   if (tick.kind === "card_chain") {
     return [
