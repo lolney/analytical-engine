@@ -493,6 +493,237 @@ function wheelList(tick) {
     .join(" / ");
 }
 
+function readoutRows(rows) {
+  return rows
+    .map(
+      ([label, value, mode = ""]) => `<div class="machine-readout-row ${mode}">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value ?? "-")}</strong>
+      </div>`,
+    )
+    .join("");
+}
+
+function plateAsset(asset, label) {
+  return `<figure class="plate-asset">
+    <img src="./assets/mechanism-${asset}.webp" alt="" aria-hidden="true" />
+    ${label ? `<figcaption>${escapeHtml(label)}</figcaption>` : ""}
+  </figure>`;
+}
+
+function plateComponent(name, title, asset, rows, active, extra = "") {
+  return `<section class="plate-component ${name} ${extra} ${active ? "active" : ""}">
+    <div class="plate-component-head">
+      <span>${escapeHtml(title)}</span>
+    </div>
+    ${plateAsset(asset)}
+    <div class="machine-readouts">${readoutRows(rows)}</div>
+  </section>`;
+}
+
+function storePlateRows() {
+  const afterMap = storeMap(state);
+  const changed = new Set(changedStoreColumns(previousState, state));
+  const visible = new Set([...afterMap.keys(), ...changed]);
+  const rows = [...visible]
+    .sort((a, b) => a - b)
+    .slice(0, 6)
+    .map((column) => [
+      `V${column}`,
+      afterMap.get(column) ?? "0",
+      changed.has(column) ? "changed" : "",
+    ]);
+  return rows.length ? rows : [["Store", "all zero"]];
+}
+
+function currentCardText(pointer) {
+  const cards = executableCards();
+  const card = cards[pointer];
+  return card ? card.text : "end of deck";
+}
+
+function activePlateParts() {
+  const active = activeMechanismParts();
+  return {
+    reader: active.has("reader") || active.has("number-reader"),
+    barrels:
+      active.has("barrel") ||
+      active.has("operation-card") ||
+      active.has("directive"),
+    axes:
+      active.has("axis") ||
+      active.has("egress") ||
+      active.has("number-reader"),
+    mill:
+      active.has("mill") ||
+      active.has("figure-wheels") ||
+      active.has("carry-train"),
+    store: active.has("store"),
+    chain:
+      active.has("card-chain") ||
+      active.has("stop") ||
+      active.has("control"),
+    runup: active.has("run-up") || active.has("control"),
+    output: active.has("output"),
+  };
+}
+
+function annotationTarget(kind) {
+  return {
+    reader: "reader",
+    number_reader: "reader",
+    store_ingress: "axes",
+    store_to_mill: "axes",
+    mill: "mill",
+    run_up: "runup",
+    mill_to_store: "axes",
+    operation_barrel: "barrels",
+    directive: "chain",
+    run_up_feeler: "runup",
+    stopping_lever: "chain",
+    output: "output",
+    card_chain: "chain",
+  }[kind] ?? "axes";
+}
+
+function mechanicalStateRows(tick) {
+  const wheels = wheelRows(tick);
+  if (wheels.length) {
+    return wheels.slice(0, 4);
+  }
+  if (tick.kind === "card_chain") {
+    return [
+      ["index pointer", tick.before_pointer],
+      ["next card", tick.after_pointer],
+      ["chain drive", tick.before_pointer === tick.after_pointer ? "held" : "advanced"],
+    ];
+  }
+  if (tick.kind === "stopping_lever") {
+    return [
+      ["stop linkage", "engaged"],
+      ["drive pawl", "lifted"],
+      ["card-chain drive", "disengaged"],
+    ];
+  }
+  if (tick.kind === "run_up" || tick.kind === "run_up_feeler") {
+    return [
+      ["run-up lever", tick.action.includes("raised") ? "raised" : "clear"],
+      ["chain selector", tick.active?.includes("card-chain") ? "tested" : "ready"],
+    ];
+  }
+  return [
+    ["current card", tick.before_pointer],
+    ["next card", tick.after_pointer],
+  ];
+}
+
+function stateTableRows(rows) {
+  return rows
+    .map(
+      ([label, value]) => `<tr>
+        <th>${escapeHtml(label)}</th>
+        <td>${escapeHtml(value ?? "-")}</td>
+      </tr>`,
+    )
+    .join("");
+}
+
+function traceAnnotation(tick) {
+  const target = annotationTarget(tick.kind);
+  return `<article class="trace-callout target-${target}">
+    <span class="callout-index">${tick.tick}</span>
+    <div>
+      <strong>${escapeHtml(tick.action)}</strong>
+      <p>${escapeHtml(tick.detail)}</p>
+      <div class="callout-state">
+        <b>Mechanical state</b>
+        ${readoutRows(mechanicalStateRows(tick))}
+      </div>
+    </div>
+  </article>`;
+}
+
+function chainIndexStrip(beforePointer, afterPointer) {
+  const start = Math.max(0, Math.min(beforePointer, afterPointer) - 3);
+  const cells = Array.from({ length: 7 }, (_, offset) => start + offset)
+    .map(
+      (index) => `<span class="${index === afterPointer ? "active" : ""}">${index}</span>`,
+    )
+    .join("");
+  return `<div class="index-strip">${cells}</div>`;
+}
+
+function emulatorRows(summary, beforePointer, afterPointer) {
+  return stateTableRows([
+    ["decoded operation", currentCardText(beforePointer)],
+    ["currentCard", beforePointer],
+    ["nextCard", afterPointer],
+    ["runUp", summary.runUp],
+    ["operation", summary.operation],
+    ["ingress1", summary.ingress1],
+    ["ingress2", summary.ingress2],
+    ["egress", summary.egress],
+    ["output", summary.output],
+  ]);
+}
+
+function renderMachinePlate() {
+  const summary = readMachineSummary(state);
+  const beforePointer = lastMechanism.ticks[0]?.before_pointer ?? state.pointer;
+  const afterPointer = lastMechanism.ticks.at(-1)?.after_pointer ?? state.pointer;
+  const active = activePlateParts();
+  const cardMotion =
+    beforePointer === afterPointer
+      ? `held at ${afterPointer}`
+      : `${beforePointer} -> ${afterPointer}`;
+  const annotations = lastMechanism.ticks.map(traceAnnotation).join("");
+
+  return `<li class="machine-trace-item">
+    <div class="machine-plate" role="img" aria-label="${escapeHtml(lastMechanism.summary)}">
+      <div class="trace-annotations" aria-label="Crank-turn annotations">
+        ${annotations}
+      </div>
+      <div class="mechanism-stage">
+        <div class="chain-direction">Direction of card chain</div>
+        <img class="machine-piece chain-left ${active.chain ? "active" : ""}" src="./assets/mechanism-card-chain.webp" alt="" aria-hidden="true" />
+        <img class="machine-piece reader ${active.reader ? "active" : ""}" src="./assets/mechanism-reader.webp" alt="" aria-hidden="true" />
+        <img class="machine-piece axis ${active.axes ? "active" : ""}" src="./assets/mechanism-axis.webp" alt="" aria-hidden="true" />
+        <img class="machine-piece barrel ${active.barrels ? "active" : ""}" src="./assets/mechanism-barrel.webp" alt="" aria-hidden="true" />
+        <img class="machine-piece mill ${active.mill ? "active" : ""}" src="./assets/mechanism-mill.webp" alt="" aria-hidden="true" />
+        <img class="machine-piece store ${active.store ? "active" : ""}" src="./assets/mechanism-store.webp" alt="" aria-hidden="true" />
+        <div class="punched-card-large ${active.reader ? "active" : ""}">
+          <span>Card ${beforePointer}</span>
+          <strong>${escapeHtml(currentCardText(beforePointer))}</strong>
+          <div class="large-holes" aria-hidden="true">
+            ${Array.from({ length: 72 }, (_, index) => `<i class="${index % 5 === 0 || index % 11 === 0 ? "punched" : ""}"></i>`).join("")}
+          </div>
+        </div>
+        <div class="machine-label feelers">Feelers / sensing pins</div>
+        <div class="machine-label selector">Linkages to selector</div>
+        <div class="machine-label pawl">Stopping linkage and pawl</div>
+        <div class="machine-label pointer">Index pointer</div>
+        <div class="sprocket ${active.chain ? "active" : ""}" aria-hidden="true"></div>
+        ${chainIndexStrip(beforePointer, afterPointer)}
+        <div class="emulator-panel">
+          <h3>Emulator interpretation</h3>
+          <table>
+            <tbody>${emulatorRows(summary, beforePointer, afterPointer)}</tbody>
+          </table>
+          <p>These boxed labels are browser emulator state, not labels native to the 19th-century mechanism.</p>
+        </div>
+      </div>
+      <footer class="trace-footer">
+        <span class="clock-glyph" aria-hidden="true"></span>
+        <strong>Tick ${lastMechanism.ticks.at(-1)?.tick ?? 0} / ${lastMechanism.ticks.length}</strong>
+        <span class="footer-card current">${beforePointer} (${escapeHtml(currentCardText(beforePointer))})</span>
+        <span class="footer-arrow" aria-hidden="true"></span>
+        <span class="footer-card next">${afterPointer} (${escapeHtml(currentCardText(afterPointer))})</span>
+        <span class="footer-state">${escapeHtml(cardMotion)}</span>
+      </footer>
+    </div>
+  </li>`;
+}
+
 function renderMechanism() {
   const active = activeMechanismParts();
   for (const node of els.machineNodes) {
@@ -502,34 +733,7 @@ function renderMechanism() {
   els.mechanismSummary.textContent = lastMechanism.summary;
   els.mechanismCount.textContent = `${lastMechanism.ticks.length} ticks`;
   els.mechanismTicks.innerHTML = lastMechanism.ticks.length
-    ? lastMechanism.ticks
-        .map((tick) => {
-          const wheels = (tick.wheels ?? [])
-            .map(
-              (wheel) => `<span class="wheel">
-                <span>${escapeHtml(wheel.label)}</span>
-                ${escapeHtml(wheel.sign)}${escapeHtml(wheel.digits)}
-              </span>`,
-            )
-            .join("");
-          const tags = (tick.active ?? [])
-            .map((part) => `<span class="tag">${escapeHtml(part)}</span>`)
-            .join("");
-          return `<li>
-            <div class="tick-head">
-              <span>${tick.tick}</span>
-              <strong>${escapeHtml(tick.station)}</strong>
-            </div>
-              <div class="tick-body">
-                <b>${escapeHtml(tick.action)}</b>
-                <p>${escapeHtml(tick.detail)}</p>
-                <div class="tag-row">${tags}</div>
-                <div class="wheel-row">${wheels}</div>
-                ${tickVisual(tick)}
-              </div>
-          </li>`;
-        })
-        .join("")
+    ? renderMachinePlate()
     : `<li class="empty-trace">No crank-turn phases yet.</li>`;
 }
 
