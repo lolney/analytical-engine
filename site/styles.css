@@ -84,8 +84,7 @@ h2 {
   grid-template-areas:
     "deck controls"
     "deck state"
-    "mechanism mechanism"
-    "store cards";
+    "mechanism mechanism";
   gap: 16px;
   padding: 16px;
 }
@@ -97,9 +96,7 @@ section {
 .deck-pane,
 .control-pane,
 .state-pane,
-.mechanism-pane,
-.store-pane,
-.cards-pane {
+.mechanism-pane {
   border: 1px solid var(--line);
   background: var(--panel);
   border-radius: 8px;
@@ -126,23 +123,18 @@ section {
   grid-area: mechanism;
 }
 
-.store-pane {
-  grid-area: store;
-}
-
-.cards-pane {
-  grid-area: cards;
-}
-
 .control-pane,
 .state-pane,
-.mechanism-pane,
-.store-pane {
+.mechanism-pane {
   padding: 14px;
 }
 
-.cards-pane {
-  padding: 14px;
+.store-pane {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+  background: #fbfcfd;
 }
 
 .pane-head {
@@ -156,8 +148,7 @@ section {
 
 .state-pane .pane-head,
 .mechanism-pane .pane-head,
-.store-pane .pane-head,
-.cards-pane .pane-head {
+.store-pane .pane-head {
   padding: 0 0 12px;
   margin-bottom: 12px;
 }
@@ -233,8 +224,7 @@ button:disabled {
 .metric,
 .instruction,
 .diff-card,
-.store-cell,
-.card-list li {
+.store-cell {
   border: 1px solid var(--line);
   background: #fbfcfd;
   border-radius: 6px;
@@ -260,9 +250,16 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.state-store-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 0.9fr);
+  gap: 14px;
+  align-items: start;
+}
+
 .diff-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
 }
 
@@ -1099,20 +1096,7 @@ button:disabled {
 
 .mechanism-stage::before {
   content: "";
-  position: absolute;
-  left: -4%;
-  right: -4%;
-  top: 54%;
-  height: 26px;
-  border-top: 6px solid #806d4c;
-  border-bottom: 6px solid #806d4c;
-  background: repeating-linear-gradient(
-    90deg,
-    #42595a 0 11px,
-    #e2c26a 11px 17px,
-    #42595a 17px 28px
-  );
-  box-shadow: 0 5px 8px #33281722;
+  display: none;
 }
 
 .mechanism-stage::after {
@@ -1593,8 +1577,7 @@ button:disabled {
 }
 
 .diff-card.changed,
-.store-cell.changed,
-.card-list li.active {
+.store-cell.changed {
   border-color: var(--mark);
   background: #fff8df;
 }
@@ -1616,25 +1599,6 @@ button:disabled {
   color: var(--muted);
   font-family: inherit;
   font-size: 12px;
-}
-
-.card-list {
-  display: grid;
-  gap: 6px;
-  max-height: 240px;
-  overflow: auto;
-  margin: 0;
-  padding-left: 28px;
-}
-
-.card-list li {
-  padding: 7px 9px;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 13px;
-}
-
-.card-list li.done {
-  color: var(--muted);
 }
 
 .dot {
@@ -1665,9 +1629,7 @@ button:disabled {
       "deck"
       "controls"
       "state"
-      "mechanism"
-      "store"
-      "cards";
+      "mechanism";
   }
 
   .deck-pane {
@@ -1680,6 +1642,7 @@ button:disabled {
 
   .metrics,
   .diff-grid,
+  .state-store-layout,
   .machine-map {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
   }
@@ -1693,6 +1656,7 @@ button:disabled {
 
   .metrics,
   .diff-grid,
+  .state-store-layout,
   .machine-map {
     grid-template-columns: 1fr;
   }

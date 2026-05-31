@@ -68,8 +68,6 @@ const els = {
   diff: document.querySelector("#diff-grid"),
   store: document.querySelector("#store-grid"),
   storeCount: document.querySelector("#store-count"),
-  cardList: document.querySelector("#card-list"),
-  cardCount: document.querySelector("#card-count"),
   mechanismSummary: document.querySelector("#mechanism-summary"),
   mechanismTicks: document.querySelector("#mechanism-ticks"),
   mechanismCount: document.querySelector("#mechanism-count"),
@@ -211,20 +209,6 @@ function renderStore() {
         })
         .join("")
     : `<div class="store-cell"><span>Store</span>All visible columns are zero</div>`;
-}
-
-function renderCards() {
-  const cards = executableCards();
-  els.cardCount.textContent = `${cards.length} cards`;
-  els.cardList.innerHTML = cards
-    .map((card, index) => {
-      const active = index === state.pointer && !state.halted;
-      const done = index < state.pointer || state.halted;
-      return `<li class="${active ? "active" : ""} ${done ? "done" : ""}">
-        ${escapeHtml(card.text)}
-      </li>`;
-    })
-    .join("");
 }
 
 function activeMechanismParts() {
@@ -578,10 +562,6 @@ function activePlateParts() {
       active.has("figure-wheels") ||
       active.has("carry-train"),
     store: active.has("store"),
-    chain:
-      active.has("card-chain") ||
-      active.has("stop") ||
-      active.has("control"),
     runup: active.has("run-up") || active.has("control"),
     output: active.has("output"),
   };
@@ -662,16 +642,6 @@ function traceAnnotation(tick) {
   </article>`;
 }
 
-function chainIndexStrip(beforePointer, afterPointer) {
-  const start = Math.max(0, Math.min(beforePointer, afterPointer) - 3);
-  const cells = Array.from({ length: 7 }, (_, offset) => start + offset)
-    .map(
-      (index) => `<span class="${index === afterPointer ? "active" : ""}">${index}</span>`,
-    )
-    .join("");
-  return `<div class="index-strip">${cells}</div>`;
-}
-
 function emulatorRows(summary, beforePointer, afterPointer) {
   return stateTableRows([
     ["decoded operation", currentCardText(beforePointer)],
@@ -703,8 +673,6 @@ function renderMachinePlate() {
         ${annotations}
       </div>
       <div class="mechanism-stage">
-        <div class="chain-direction">Direction of card chain</div>
-        <img class="machine-piece chain-left ${active.chain ? "active" : ""}" src="./assets/mechanism-card-chain.webp" alt="" aria-hidden="true" />
         <img class="machine-piece reader ${active.reader ? "active" : ""}" src="./assets/mechanism-reader.webp" alt="" aria-hidden="true" />
         <img class="machine-piece axis ${active.axes ? "active" : ""}" src="./assets/mechanism-axis.webp" alt="" aria-hidden="true" />
         <img class="machine-piece barrel ${active.barrels ? "active" : ""}" src="./assets/mechanism-barrel.webp" alt="" aria-hidden="true" />
@@ -721,8 +689,6 @@ function renderMachinePlate() {
         <div class="machine-label selector">Linkages to selector</div>
         <div class="machine-label pawl">Stopping linkage and pawl</div>
         <div class="machine-label pointer">Index pointer</div>
-        <div class="sprocket ${active.chain ? "active" : ""}" aria-hidden="true"></div>
-        ${chainIndexStrip(beforePointer, afterPointer)}
         <div class="emulator-panel">
           <h3>Emulator interpretation</h3>
           <table>
@@ -770,7 +736,6 @@ function render() {
   renderMetrics();
   renderDiff();
   renderStore();
-  renderCards();
   renderMechanism();
 }
 

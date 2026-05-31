@@ -56,7 +56,16 @@
             <span class="dot live"></span> active
           </div>
         </div>
-        <div class="diff-grid" id="diff-grid"></div>
+        <div class="state-store-layout">
+          <div class="diff-grid" id="diff-grid"></div>
+          <div class="store-pane" aria-label="Store columns">
+            <div class="pane-head">
+              <h2>Store</h2>
+              <span id="store-count"></span>
+            </div>
+            <div class="store-grid" id="store-grid"></div>
+          </div>
+        </div>
       </section>
 
       <section class="mechanism-pane" aria-label="Mechanical trace">
@@ -85,28 +94,8 @@
           <div class="machine-node" data-part="store">
             <span class="machine-icon">□</span>Store
           </div>
-          <div class="machine-link"></div>
-          <div class="machine-node" data-part="card-chain">
-            <span class="machine-icon">∞</span>Card Chain
-          </div>
         </div>
         <ol class="mechanism-ticks" id="mechanism-ticks"></ol>
-      </section>
-
-      <section class="store-pane" aria-label="Store columns">
-        <div class="pane-head">
-          <h2>Store</h2>
-          <span id="store-count"></span>
-        </div>
-        <div class="store-grid" id="store-grid"></div>
-      </section>
-
-      <section class="cards-pane" aria-label="Executable cards">
-        <div class="pane-head">
-          <h2>Executable Deck</h2>
-          <span id="card-count"></span>
-        </div>
-        <ol id="card-list" class="card-list"></ol>
       </section>
     </main>
 
