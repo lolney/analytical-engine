@@ -60,7 +60,7 @@ instruction.
 
 The public GitHub Pages deployment is:
 
-<https://lolney.github.io/analytical-engine/>
+<https://lukeolney.me/analytical-engine/>
 
 Build the WASM package:
 
