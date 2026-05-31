@@ -1,0 +1,14 @@
+# Babbage-style division example: 10000 / 28.
+# Primed egress receives the quotient; main egress receives the remainder.
+N 10000
+V NUMBER -> V1
+N 28
+V NUMBER -> V2
+O /
+V V1 -> I1
+V V2 -> I2
+V EP -> V3
+V E -> V4
+PRINT V3
+PRINT V4
+HALT

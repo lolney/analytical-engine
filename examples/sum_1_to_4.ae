@@ -1,0 +1,19 @@
+# Sum 4 + 3 + 2 + 1 using reversed card motion controlled by the run-up lever.
+N 4
+V NUMBER -> V0
+N 0
+V NUMBER -> V1
+N 1
+V NUMBER -> V2
+O +
+V V1 -> I1
+V V0 -> I2
+V E -> V1
+O -
+V V0 -> I1
+V V2 -> I2
+JUMP_IF_RUNUP 3
+V E -> V0
+JUMP -9
+PRINT V1
+HALT
