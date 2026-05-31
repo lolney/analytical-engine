@@ -11,11 +11,12 @@ Engine.  The goal is historical faithfulness at the architectural level:
 - a run-up lever flag that can guide conditional card motion
 - primed ingress and egress axes for double-width division and multiplication
 
-This is not a cycle-accurate reconstruction of every gear train or barrel in
-Babbage's drawings.  It is a card-level emulator intended to preserve the
-machine's programmer-visible model.  The text deck format is an interleaved
-notation for cards that Babbage's mechanism would have presented through
-separate card apparatus.
+This emulator is card-semantic with an explanatory mechanism trace: it models
+the state changes visible to an analyst using Babbage-style cards, then expands
+each card into reader, barrel, axis, figure-wheel, run-up, and card-chain phases.
+It still does not simulate every tooth, stud, or crank timing from Babbage's
+drawings.  The text deck format is an interleaved notation for cards that
+Babbage's mechanism would have presented through separate card apparatus.
 
 ## Run
 
@@ -44,8 +45,10 @@ let next_state = result.state;
 
 `step_instruction` takes one card instruction plus a serializable
 `ProgramState` and returns a `StepResult` containing the next state, normalized
-instruction text, and pointer advance.  JSON helpers are available for browser
-bindings:
+instruction text, pointer advance, and a `MechanismTrace`.  The trace breaks the
+card into crank-turn phases such as card reading, barrel selection, axis
+coupling, figure-wheel motion, run-up lever testing, and card-chain movement.
+JSON helpers are available for browser bindings:
 
 ```rust
 let state_json = analytical_engine::initial_program_state_json();
@@ -56,7 +59,8 @@ let result_json = analytical_engine::step_instruction_json("N 12", &state_json)?
 
 The `site/` directory contains a static browser visualizer that executes cards
 one at a time through the WASM build and shows the state difference after each
-instruction.
+instruction.  It also shows the mechanism trace for the last executed card,
+including active subsystems and compact decimal wheel snapshots.
 
 The public GitHub Pages deployment is:
 

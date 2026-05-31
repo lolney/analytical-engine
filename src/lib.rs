@@ -167,6 +167,30 @@ pub struct StepResult {
     pub state: ProgramState,
     pub instruction: String,
     pub advance: String,
+    pub mechanism: MechanismTrace,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MechanismTrace {
+    pub summary: String,
+    pub ticks: Vec<MechanismTick>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MechanismTick {
+    pub tick: usize,
+    pub station: String,
+    pub action: String,
+    pub detail: String,
+    pub active: Vec<String>,
+    pub wheels: Vec<WheelSnapshot>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WheelSnapshot {
+    pub label: String,
+    pub sign: String,
+    pub digits: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -617,6 +641,11 @@ pub fn step_instruction(
             state: state.clone(),
             instruction: instruction.trim().to_string(),
             advance: "halted".to_string(),
+            mechanism: MechanismTrace {
+                summary: "The card chain is already halted; no mechanical motion occurs."
+                    .to_string(),
+                ticks: Vec::new(),
+            },
         });
     }
 
@@ -642,16 +671,407 @@ pub fn step_instruction(
         return Err(EngineError::PointerOutOfDeck(pointer));
     }
 
+    let next_state = ProgramState {
+        machine: engine.state(),
+        pointer,
+        halted,
+        steps: state.steps + 1,
+    };
+    let mechanism = build_mechanism_trace(card, state, &next_state, &label);
+
     Ok(StepResult {
-        state: ProgramState {
-            machine: engine.state(),
-            pointer,
-            halted,
-            steps: state.steps + 1,
-        },
+        state: next_state,
         instruction: card.to_string(),
         advance: label,
+        mechanism,
     })
+}
+
+fn build_mechanism_trace(
+    card: &Card,
+    before: &ProgramState,
+    after: &ProgramState,
+    advance: &str,
+) -> MechanismTrace {
+    let mut builder = MechanismBuilder::new(card_mechanism_summary(card));
+    builder.push(
+        "Card reader",
+        "Read punched card",
+        format!(
+            "Card {} presents `{}` to the reading prism.",
+            before.pointer, card
+        ),
+        ["reader", card_family(card)],
+        visible_wheels(&before.machine),
+    );
+
+    match card {
+        Card::Number(value) => {
+            builder.push(
+                "Number cards",
+                "Set number reader",
+                format!("Decimal constant {value} is held on the number-reader axis."),
+                ["number-card", "number-reader"],
+                vec![wheel_snapshot("Number", value)],
+            );
+        }
+        Card::Operation(operation) => {
+            builder.push(
+                "Operation barrel",
+                "Select mill program",
+                format!(
+                    "Stud row for operation `{}` shifts the mill control barrel.",
+                    operation.symbol()
+                ),
+                ["operation-card", "barrel", "mill"],
+                visible_wheels(&after.machine),
+            );
+        }
+        Card::Variable(VariableTransfer::NumberToStore { column }) => {
+            builder.push(
+                "Store ingress",
+                "Write number into store",
+                format!(
+                    "The number reader is coupled to Store column V{}.",
+                    column.index()
+                ),
+                ["number-reader", "store"],
+                store_column_wheels(&after.machine, *column),
+            );
+        }
+        Card::Variable(VariableTransfer::StoreToMill {
+            column,
+            axis,
+            erase,
+        }) => {
+            builder.push(
+                "Store to mill axis",
+                "Couple store column to ingress",
+                format!(
+                    "V{} turns {}{}.",
+                    column.index(),
+                    ingress_axis_label(*axis),
+                    if *erase {
+                        "; store column is cleared"
+                    } else {
+                        ""
+                    }
+                ),
+                ["store", "axis", "mill", "barrel"],
+                store_column_wheels(&before.machine, *column),
+            );
+
+            if matches!(axis, IngressAxis::Second) {
+                builder.push(
+                    "Mill figure wheels",
+                    "Run selected arithmetic barrel",
+                    arithmetic_detail(&before.machine, &after.machine),
+                    ["mill", "barrel", "figure-wheels", "carry-train"],
+                    mill_wheels(&after.machine),
+                );
+                builder.push(
+                    "Run-up lever",
+                    if after.machine.mill.run_up {
+                        "Lever raised"
+                    } else {
+                        "Lever clear"
+                    },
+                    run_up_detail(&before.machine, &after.machine),
+                    ["run-up", "control"],
+                    mill_wheels(&after.machine),
+                );
+            }
+        }
+        Card::Variable(VariableTransfer::MillToStore { axis, column }) => {
+            builder.push(
+                "Mill egress axis",
+                "Copy result into store",
+                format!(
+                    "{} is coupled back to Store column V{}.",
+                    egress_axis_label(*axis),
+                    column.index()
+                ),
+                ["egress", "store"],
+                store_column_wheels(&after.machine, *column),
+            );
+        }
+        Card::Directive(Directive::Jump(offset)) => {
+            builder.push(
+                "Directive prism",
+                "Move card chain",
+                format!("Directive barrel commands a relative movement of {offset:+} cards."),
+                ["directive", "card-chain"],
+                Vec::new(),
+            );
+        }
+        Card::Directive(Directive::JumpIfRunUp(offset)) => {
+            builder.push(
+                "Run-up feeler",
+                "Test run-up lever",
+                format!(
+                    "Lever is {}; conditional movement is {}.",
+                    if before.machine.mill.run_up {
+                        "set"
+                    } else {
+                        "clear"
+                    },
+                    if before.machine.mill.run_up {
+                        format!("{offset:+}")
+                    } else {
+                        "+1".to_string()
+                    }
+                ),
+                ["directive", "run-up", "card-chain"],
+                Vec::new(),
+            );
+        }
+        Card::Directive(Directive::JumpUnlessRunUp(offset)) => {
+            builder.push(
+                "Run-up feeler",
+                "Test run-up lever",
+                format!(
+                    "Lever is {}; conditional movement is {}.",
+                    if before.machine.mill.run_up {
+                        "set"
+                    } else {
+                        "clear"
+                    },
+                    if before.machine.mill.run_up {
+                        "+1".to_string()
+                    } else {
+                        format!("{offset:+}")
+                    }
+                ),
+                ["directive", "run-up", "card-chain"],
+                Vec::new(),
+            );
+        }
+        Card::Directive(Directive::Halt) => {
+            builder.push(
+                "Stopping lever",
+                "Disengage drive",
+                "The halt card arrests card-chain motion after this crank turn.",
+                ["directive", "stop"],
+                Vec::new(),
+            );
+        }
+        Card::Print(column) => {
+            builder.push(
+                "Output apparatus",
+                "Impress result",
+                format!(
+                    "Store column V{} is presented to the printing apparatus.",
+                    column.index()
+                ),
+                ["store", "output"],
+                store_column_wheels(&before.machine, *column),
+            );
+        }
+    }
+
+    builder.push(
+        "Card chain",
+        "Advance chain",
+        format!(
+            "Pointer moves from {} to {} ({advance}).",
+            before.pointer, after.pointer
+        ),
+        ["card-chain"],
+        Vec::new(),
+    );
+
+    builder.finish()
+}
+
+struct MechanismBuilder {
+    summary: String,
+    ticks: Vec<MechanismTick>,
+}
+
+impl MechanismBuilder {
+    fn new(summary: impl Into<String>) -> Self {
+        Self {
+            summary: summary.into(),
+            ticks: Vec::new(),
+        }
+    }
+
+    fn push<const N: usize>(
+        &mut self,
+        station: impl Into<String>,
+        action: impl Into<String>,
+        detail: impl Into<String>,
+        active: [&str; N],
+        wheels: Vec<WheelSnapshot>,
+    ) {
+        self.ticks.push(MechanismTick {
+            tick: self.ticks.len() + 1,
+            station: station.into(),
+            action: action.into(),
+            detail: detail.into(),
+            active: active.into_iter().map(str::to_string).collect(),
+            wheels,
+        });
+    }
+
+    fn finish(self) -> MechanismTrace {
+        MechanismTrace {
+            summary: self.summary,
+            ticks: self.ticks,
+        }
+    }
+}
+
+fn card_mechanism_summary(card: &Card) -> String {
+    match card {
+        Card::Number(_) => "A number card loads the number-reader axis.".to_string(),
+        Card::Operation(operation) => format!(
+            "An operation card positions the mill barrel for `{}`.",
+            operation.symbol()
+        ),
+        Card::Variable(VariableTransfer::StoreToMill { .. }) => {
+            "A variable card couples a store column to a mill ingress axis.".to_string()
+        }
+        Card::Variable(VariableTransfer::MillToStore { .. }) => {
+            "A variable card couples a mill egress axis back to the store.".to_string()
+        }
+        Card::Variable(VariableTransfer::NumberToStore { .. }) => {
+            "A variable card couples the number reader to the store.".to_string()
+        }
+        Card::Directive(_) => {
+            "A directive card uses the card-chain and run-up control mechanism.".to_string()
+        }
+        Card::Print(_) => {
+            "A print card presents a store column to the output apparatus.".to_string()
+        }
+    }
+}
+
+fn card_family(card: &Card) -> &'static str {
+    match card {
+        Card::Number(_) => "number-card",
+        Card::Operation(_) => "operation-card",
+        Card::Variable(_) => "variable-card",
+        Card::Directive(_) => "directive-card",
+        Card::Print(_) => "output-card",
+    }
+}
+
+fn arithmetic_detail(before: &MachineState, after: &MachineState) -> String {
+    let operation = before
+        .mill
+        .operation
+        .as_deref()
+        .unwrap_or("selected operation");
+    let egress = after.machine_value("egress").unwrap_or("-");
+    let primed = after.machine_value("primed_egress").unwrap_or("-");
+    format!(
+        "The `{operation}` barrel drives the mill figure wheels; egress is {egress}, primed egress is {primed}."
+    )
+}
+
+fn run_up_detail(before: &MachineState, after: &MachineState) -> String {
+    if before.mill.run_up == after.mill.run_up {
+        format!(
+            "Run-up remains {}.",
+            if after.mill.run_up { "set" } else { "clear" }
+        )
+    } else {
+        format!(
+            "Run-up changes from {} to {}.",
+            if before.mill.run_up { "set" } else { "clear" },
+            if after.mill.run_up { "set" } else { "clear" }
+        )
+    }
+}
+
+trait MachineStateValue {
+    fn machine_value(&self, key: &str) -> Option<&str>;
+}
+
+impl MachineStateValue for MachineState {
+    fn machine_value(&self, key: &str) -> Option<&str> {
+        match key {
+            "egress" => self.mill.egress.as_deref(),
+            "primed_egress" => self.mill.primed_egress.as_deref(),
+            _ => None,
+        }
+    }
+}
+
+fn ingress_axis_label(axis: IngressAxis) -> &'static str {
+    match axis {
+        IngressAxis::First => "Ingress Axis 1",
+        IngressAxis::PrimedFirst => "Primed Ingress Axis 1",
+        IngressAxis::Second => "Ingress Axis 2",
+    }
+}
+
+fn egress_axis_label(axis: EgressAxis) -> &'static str {
+    match axis {
+        EgressAxis::Main => "Egress Axis",
+        EgressAxis::Primed => "Primed Egress Axis",
+    }
+}
+
+fn visible_wheels(machine: &MachineState) -> Vec<WheelSnapshot> {
+    let mut wheels = mill_wheels(machine);
+    wheels.extend(
+        machine
+            .store
+            .iter()
+            .take(4)
+            .map(|cell| wheel_snapshot_from_str(format!("V{}", cell.column), &cell.value)),
+    );
+    if let Some(value) = &machine.pending_number {
+        wheels.push(wheel_snapshot_from_str("Number", value));
+    }
+    wheels
+}
+
+fn mill_wheels(machine: &MachineState) -> Vec<WheelSnapshot> {
+    [
+        ("I1", machine.mill.ingress_1.as_deref()),
+        ("IP", machine.mill.primed_ingress_1.as_deref()),
+        ("I2", machine.mill.ingress_2.as_deref()),
+        ("E", machine.mill.egress.as_deref()),
+        ("EP", machine.mill.primed_egress.as_deref()),
+    ]
+    .into_iter()
+    .filter_map(|(label, value)| value.map(|value| wheel_snapshot_from_str(label, value)))
+    .collect()
+}
+
+fn store_column_wheels(machine: &MachineState, column: Column) -> Vec<WheelSnapshot> {
+    let value = machine
+        .store
+        .iter()
+        .find(|cell| cell.column == column.index())
+        .map(|cell| cell.value.as_str())
+        .unwrap_or("0");
+    vec![wheel_snapshot_from_str(
+        format!("V{}", column.index()),
+        value,
+    )]
+}
+
+fn wheel_snapshot(label: impl Into<String>, value: &BigInt) -> WheelSnapshot {
+    wheel_snapshot_from_str(label, &value.to_string())
+}
+
+fn wheel_snapshot_from_str(label: impl Into<String>, value: &str) -> WheelSnapshot {
+    let sign = if value.starts_with('-') { "-" } else { "+" };
+    let digits = value.trim_start_matches('-');
+    let display_digits = if digits.len() > 12 {
+        format!("...{}", &digits[digits.len() - 12..])
+    } else {
+        digits.to_string()
+    };
+    WheelSnapshot {
+        label: label.into(),
+        sign: sign.to_string(),
+        digits: display_digits,
+    }
 }
 
 pub fn initial_program_state_json() -> String {
@@ -1315,6 +1735,9 @@ mod tests {
         let result = step_instruction("HALT", &state).unwrap();
 
         assert!(result.state.halted);
+        assert_eq!(result.mechanism.ticks.len(), 3);
+        assert_eq!(result.mechanism.ticks[0].station, "Card reader");
+        assert_eq!(result.mechanism.ticks[1].station, "Stopping lever");
         assert_eq!(result.state.machine.output, vec!["5"]);
         assert_eq!(
             result
@@ -1337,5 +1760,16 @@ mod tests {
         assert_eq!(result.state.machine.pending_number.as_deref(), Some("12"));
         assert_eq!(result.state.pointer, 1);
         assert_eq!(result.state.steps, 1);
+        assert_eq!(
+            result.mechanism.summary,
+            "A number card loads the number-reader axis."
+        );
+        assert!(
+            result
+                .mechanism
+                .ticks
+                .iter()
+                .any(|tick| tick.active.iter().any(|part| part == "number-reader"))
+        );
     }
 }

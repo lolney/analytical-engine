@@ -69,11 +69,19 @@ const els = {
   storeCount: document.querySelector("#store-count"),
   cardList: document.querySelector("#card-list"),
   cardCount: document.querySelector("#card-count"),
+  mechanismSummary: document.querySelector("#mechanism-summary"),
+  mechanismTicks: document.querySelector("#mechanism-ticks"),
+  mechanismCount: document.querySelector("#mechanism-count"),
+  machineNodes: [...document.querySelectorAll(".machine-node")],
 };
 
 let state;
 let previousState;
 let lastInstruction = "No card executed";
+let lastMechanism = {
+  summary: "Execute a card to see the reader, barrels, axes, figure wheels, and card chain.",
+  ticks: [],
+};
 
 function escapeHtml(value) {
   return String(value)
@@ -98,6 +106,11 @@ function resetState() {
   state = JSON.parse(wasm_initial_program_state_json());
   previousState = structuredClone(state);
   lastInstruction = "No card executed";
+  lastMechanism = {
+    summary:
+      "Execute a card to see the reader, barrels, axes, figure wheels, and card chain.",
+    ticks: [],
+  };
   render();
 }
 
@@ -195,6 +208,55 @@ function renderCards() {
     .join("");
 }
 
+function activeMechanismParts() {
+  const parts = new Set();
+  for (const tick of lastMechanism.ticks) {
+    for (const part of tick.active ?? []) {
+      parts.add(part);
+    }
+  }
+  return parts;
+}
+
+function renderMechanism() {
+  const active = activeMechanismParts();
+  for (const node of els.machineNodes) {
+    node.classList.toggle("active", active.has(node.dataset.part));
+  }
+
+  els.mechanismSummary.textContent = lastMechanism.summary;
+  els.mechanismCount.textContent = `${lastMechanism.ticks.length} ticks`;
+  els.mechanismTicks.innerHTML = lastMechanism.ticks.length
+    ? lastMechanism.ticks
+        .map((tick) => {
+          const wheels = (tick.wheels ?? [])
+            .map(
+              (wheel) => `<span class="wheel">
+                <span>${escapeHtml(wheel.label)}</span>
+                ${escapeHtml(wheel.sign)}${escapeHtml(wheel.digits)}
+              </span>`,
+            )
+            .join("");
+          const tags = (tick.active ?? [])
+            .map((part) => `<span class="tag">${escapeHtml(part)}</span>`)
+            .join("");
+          return `<li>
+            <div class="tick-head">
+              <span>${tick.tick}</span>
+              <strong>${escapeHtml(tick.station)}</strong>
+            </div>
+            <div class="tick-body">
+              <b>${escapeHtml(tick.action)}</b>
+              <p>${escapeHtml(tick.detail)}</p>
+              <div class="tag-row">${tags}</div>
+              <div class="wheel-row">${wheels}</div>
+            </div>
+          </li>`;
+        })
+        .join("")
+    : `<li class="empty-trace">No crank-turn phases yet.</li>`;
+}
+
 function render() {
   const cards = executableCards();
   const outOfDeck = state.pointer >= cards.length;
@@ -209,6 +271,7 @@ function render() {
   renderDiff();
   renderStore();
   renderCards();
+  renderMechanism();
 }
 
 function executeStep() {
@@ -226,6 +289,7 @@ function executeStep() {
     );
     state = result.state;
     lastInstruction = `${result.instruction}  ->  ${result.advance}`;
+    lastMechanism = result.mechanism;
     render();
     return true;
   } catch (error) {
