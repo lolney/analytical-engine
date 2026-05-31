@@ -6,9 +6,12 @@
 
 use num_bigint::BigInt;
 use num_traits::{Signed, ToPrimitive, Zero};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 use thiserror::Error;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
 
 pub const STORE_COLUMNS: usize = 1000;
 pub const DEFAULT_FIGURES: usize = 50;
@@ -31,6 +34,16 @@ pub enum EngineError {
     StepLimit(usize),
     #[error("parse error on line {line}: {message}")]
     Parse { line: usize, message: String },
+    #[error("expected exactly one instruction, got {0}")]
+    InstructionCount(usize),
+    #[error("invalid decimal value `{0}`")]
+    BadDecimal(String),
+    #[error("invalid operation `{0}` in state")]
+    BadStateOperation(String),
+    #[error("state points before the start of the deck at {0}")]
+    BadStatePointer(isize),
+    #[error("invalid JSON state: {0}")]
+    BadJson(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,6 +128,47 @@ pub enum Card {
     Print(Column),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoreCellState {
+    pub column: usize,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MillState {
+    pub operation: Option<String>,
+    pub ingress_1: Option<String>,
+    pub primed_ingress_1: Option<String>,
+    pub ingress_2: Option<String>,
+    pub egress: Option<String>,
+    pub primed_egress: Option<String>,
+    pub run_up: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MachineState {
+    pub figures: usize,
+    pub store: Vec<StoreCellState>,
+    pub mill: MillState,
+    pub pending_number: Option<String>,
+    pub output: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProgramState {
+    pub machine: MachineState,
+    pub pointer: isize,
+    pub halted: bool,
+    pub steps: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StepResult {
+    pub state: ProgramState,
+    pub instruction: String,
+    pub advance: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Store {
     columns: Vec<BigInt>,
@@ -176,6 +230,54 @@ impl Mill {
 
     pub fn run_up(&self) -> bool {
         self.run_up
+    }
+
+    pub fn state(&self) -> MillState {
+        MillState {
+            operation: self
+                .operation
+                .map(|operation| operation.symbol().to_string()),
+            ingress_1: self.ingress_1.as_ref().map(ToString::to_string),
+            primed_ingress_1: self.primed_ingress_1.as_ref().map(ToString::to_string),
+            ingress_2: self.ingress_2.as_ref().map(ToString::to_string),
+            egress: self.egress.as_ref().map(ToString::to_string),
+            primed_egress: self.primed_egress.as_ref().map(ToString::to_string),
+            run_up: self.run_up,
+        }
+    }
+
+    pub fn from_state(state: &MillState, figures: usize) -> Result<Self, EngineError> {
+        let operation = state
+            .operation
+            .as_deref()
+            .map(operation_from_label)
+            .transpose()?;
+
+        let mill = Self {
+            operation,
+            ingress_1: parse_optional_decimal(&state.ingress_1)?,
+            primed_ingress_1: parse_optional_decimal(&state.primed_ingress_1)?,
+            ingress_2: parse_optional_decimal(&state.ingress_2)?,
+            egress: parse_optional_decimal(&state.egress)?,
+            primed_egress: parse_optional_decimal(&state.primed_egress)?,
+            run_up: state.run_up,
+            figures,
+        };
+
+        for value in [
+            &mill.ingress_1,
+            &mill.primed_ingress_1,
+            &mill.ingress_2,
+            &mill.egress,
+            &mill.primed_egress,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            check_width(value, figures)?;
+        }
+
+        Ok(mill)
     }
 
     fn set_operation(&mut self, operation: Operation) {
@@ -336,6 +438,53 @@ impl Engine {
         self.store.write(column, value)
     }
 
+    pub fn state(&self) -> MachineState {
+        let store = self
+            .store
+            .columns
+            .iter()
+            .enumerate()
+            .filter_map(|(column, value)| {
+                if value.is_zero() {
+                    None
+                } else {
+                    Some(StoreCellState {
+                        column,
+                        value: value.to_string(),
+                    })
+                }
+            })
+            .collect();
+
+        MachineState {
+            figures: self.store.figures,
+            store,
+            mill: self.mill.state(),
+            pending_number: self.pending_number.as_ref().map(ToString::to_string),
+            output: self.output.iter().map(ToString::to_string).collect(),
+        }
+    }
+
+    pub fn from_state(state: &MachineState) -> Result<Self, EngineError> {
+        let mut engine = Self::with_figures(state.figures);
+
+        for cell in &state.store {
+            let column = Column::new(cell.column)?;
+            let value = parse_decimal(&cell.value)?;
+            engine.store.write(column, value)?;
+        }
+
+        engine.mill = Mill::from_state(&state.mill, state.figures)?;
+        engine.pending_number = parse_optional_decimal(&state.pending_number)?;
+        engine.output = state
+            .output
+            .iter()
+            .map(|value| parse_decimal(value))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(engine)
+    }
+
     pub fn run(&mut self, deck: &[Card], limit: usize) -> Result<RunReport, EngineError> {
         let mut pointer: isize = 0;
         let mut steps = 0;
@@ -444,6 +593,89 @@ impl Default for Engine {
     fn default() -> Self {
         Self::new()
     }
+}
+
+pub fn initial_program_state() -> ProgramState {
+    ProgramState {
+        machine: Engine::new().state(),
+        pointer: 0,
+        halted: false,
+        steps: 0,
+    }
+}
+
+pub fn step_instruction(
+    instruction: &str,
+    state: &ProgramState,
+) -> Result<StepResult, EngineError> {
+    if state.pointer < 0 {
+        return Err(EngineError::BadStatePointer(state.pointer));
+    }
+
+    if state.halted {
+        return Ok(StepResult {
+            state: state.clone(),
+            instruction: instruction.trim().to_string(),
+            advance: "halted".to_string(),
+        });
+    }
+
+    let cards = parse_deck(instruction)?;
+    if cards.len() != 1 {
+        return Err(EngineError::InstructionCount(cards.len()));
+    }
+
+    let card = &cards[0];
+    let mut engine = Engine::from_state(&state.machine)?;
+    let advance = engine.execute(card)?;
+    let (pointer, halted, label) = match advance {
+        Advance::Next => (state.pointer + 1, false, "next".to_string()),
+        Advance::Relative(offset) => (
+            state.pointer + offset,
+            false,
+            format!("relative {offset:+}"),
+        ),
+        Advance::Halt => (state.pointer, true, "halt".to_string()),
+    };
+
+    if pointer < 0 {
+        return Err(EngineError::PointerOutOfDeck(pointer));
+    }
+
+    Ok(StepResult {
+        state: ProgramState {
+            machine: engine.state(),
+            pointer,
+            halted,
+            steps: state.steps + 1,
+        },
+        instruction: card.to_string(),
+        advance: label,
+    })
+}
+
+pub fn initial_program_state_json() -> String {
+    serde_json::to_string(&initial_program_state()).expect("program state is serializable")
+}
+
+pub fn step_instruction_json(instruction: &str, state_json: &str) -> Result<String, EngineError> {
+    let state = serde_json::from_str::<ProgramState>(state_json)
+        .map_err(|error| EngineError::BadJson(error.to_string()))?;
+    let result = step_instruction(instruction, &state)?;
+    serde_json::to_string(&result).map_err(|error| EngineError::BadJson(error.to_string()))
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn wasm_initial_program_state_json() -> String {
+    initial_program_state_json()
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn wasm_step_instruction_json(instruction: &str, state_json: &str) -> Result<String, JsValue> {
+    step_instruction_json(instruction, state_json)
+        .map_err(|error| JsValue::from_str(&error.to_string()))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -594,6 +826,10 @@ fn parse_operation(token: &str) -> Result<Operation, String> {
     }
 }
 
+fn operation_from_label(token: &str) -> Result<Operation, EngineError> {
+    parse_operation(token).map_err(|_| EngineError::BadStateOperation(token.to_string()))
+}
+
 fn parse_ingress(token: &str) -> Result<IngressAxis, String> {
     match token.to_ascii_uppercase().as_str() {
         "I1" | "INGRESS1" | "INGRESS_1" => Ok(IngressAxis::First),
@@ -642,6 +878,14 @@ fn check_width(value: &BigInt, figures: usize) -> Result<(), EngineError> {
             figures,
         })
     }
+}
+
+fn parse_decimal(value: &str) -> Result<BigInt, EngineError> {
+    BigInt::from_str(value).map_err(|_| EngineError::BadDecimal(value.to_string()))
+}
+
+fn parse_optional_decimal(value: &Option<String>) -> Result<Option<BigInt>, EngineError> {
+    value.as_deref().map(parse_decimal).transpose()
 }
 
 fn fits_width(value: &BigInt, figures: usize) -> bool {
@@ -1048,5 +1292,50 @@ mod tests {
 
             assert!(engine.run(&deck, 100).is_err(), "{source} should fail");
         }
+    }
+
+    #[test]
+    fn public_step_api_returns_next_program_state() {
+        let mut state = initial_program_state();
+
+        for instruction in [
+            "N 2",
+            "V NUMBER -> V0",
+            "N 3",
+            "V NUMBER -> V1",
+            "O +",
+            "V V0 -> I1",
+            "V V1 -> I2",
+            "V E -> V2",
+            "PRINT V2",
+        ] {
+            state = step_instruction(instruction, &state).unwrap().state;
+        }
+
+        let result = step_instruction("HALT", &state).unwrap();
+
+        assert!(result.state.halted);
+        assert_eq!(result.state.machine.output, vec!["5"]);
+        assert_eq!(
+            result
+                .state
+                .machine
+                .store
+                .iter()
+                .find(|cell| cell.column == 2)
+                .map(|cell| cell.value.as_str()),
+            Some("5")
+        );
+    }
+
+    #[test]
+    fn public_step_json_round_trips_state() {
+        let state_json = initial_program_state_json();
+        let result_json = step_instruction_json("N 12", &state_json).unwrap();
+        let result = serde_json::from_str::<StepResult>(&result_json).unwrap();
+
+        assert_eq!(result.state.machine.pending_number.as_deref(), Some("12"));
+        assert_eq!(result.state.pointer, 1);
+        assert_eq!(result.state.steps, 1);
     }
 }

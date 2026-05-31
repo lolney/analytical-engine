@@ -30,6 +30,56 @@ P0: 357
 P1: 4
 ```
 
+## Step API
+
+The library exposes a pure step API for visualizers and other front ends:
+
+```rust
+use analytical_engine::{initial_program_state, step_instruction};
+
+let state = initial_program_state();
+let result = step_instruction("N 12", &state)?;
+let next_state = result.state;
+```
+
+`step_instruction` takes one card instruction plus a serializable
+`ProgramState` and returns a `StepResult` containing the next state, normalized
+instruction text, and pointer advance.  JSON helpers are available for browser
+bindings:
+
+```rust
+let state_json = analytical_engine::initial_program_state_json();
+let result_json = analytical_engine::step_instruction_json("N 12", &state_json)?;
+```
+
+## Static Visualizer
+
+The `site/` directory contains a static browser visualizer that executes cards
+one at a time through the WASM build and shows the state difference after each
+instruction.
+
+The public GitHub Pages deployment is:
+
+<https://lolney.github.io/analytical-engine/>
+
+Build the WASM package:
+
+```sh
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.122 --locked
+cargo build --release --target wasm32-unknown-unknown
+rm -rf site/pkg
+wasm-bindgen --target web --out-dir site/pkg \
+  target/wasm32-unknown-unknown/release/analytical_engine.wasm
+```
+
+Serve the static site:
+
+```sh
+cd site
+python3 -m http.server 4173 --bind 127.0.0.1
+```
+
 ## Card Deck Syntax
 
 Blank lines and `#` comments are ignored.

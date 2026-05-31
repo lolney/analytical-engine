@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Analytical Engine State Visualizer</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Analytical Engine</h1>
+        <p>Card-by-card state difference visualizer</p>
+      </div>
+      <div class="run-status" id="run-status">Ready</div>
+    </header>
+
+    <main class="workspace">
+      <section class="deck-pane" aria-label="Card deck">
+        <div class="pane-head">
+          <h2>Cards</h2>
+          <div class="button-row">
+            <button id="load-sum" type="button" title="Load summation deck">Sum</button>
+            <button id="load-division" type="button" title="Load division deck">
+              Divide
+            </button>
+          </div>
+        </div>
+        <textarea id="deck-input" spellcheck="false"></textarea>
+      </section>
+
+      <section class="control-pane" aria-label="Execution controls">
+        <div class="controls">
+          <button id="reset" type="button" title="Reset state and rewind cards">
+            Reset
+          </button>
+          <button id="step" type="button" title="Execute the highlighted card">
+            Step
+          </button>
+          <button id="run" type="button" title="Run until halt or deck end">
+            Run
+          </button>
+        </div>
+        <div class="metrics" id="metrics"></div>
+        <div class="instruction" id="instruction"></div>
+      </section>
+
+      <section class="state-pane" aria-label="Machine state">
+        <div class="pane-head">
+          <h2>State Difference</h2>
+          <div class="legend">
+            <span class="dot changed"></span> changed
+            <span class="dot live"></span> active
+          </div>
+        </div>
+        <div class="diff-grid" id="diff-grid"></div>
+      </section>
+
+      <section class="store-pane" aria-label="Store columns">
+        <div class="pane-head">
+          <h2>Store</h2>
+          <span id="store-count"></span>
+        </div>
+        <div class="store-grid" id="store-grid"></div>
+      </section>
+
+      <section class="cards-pane" aria-label="Executable cards">
+        <div class="pane-head">
+          <h2>Executable Deck</h2>
+          <span id="card-count"></span>
+        </div>
+        <ol id="card-list" class="card-list"></ol>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
