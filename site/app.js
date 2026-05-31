@@ -791,6 +791,35 @@ function runUntilStop() {
   }
 }
 
+function isEditingText(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  return (
+    target.isContentEditable ||
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+  );
+}
+
+function handleHotkey(event) {
+  if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) {
+    return;
+  }
+  if (isEditingText(event)) {
+    return;
+  }
+  if (event.key === "ArrowRight") {
+    event.preventDefault();
+    executeStep();
+  } else if (event.key.toLowerCase() === "r") {
+    event.preventDefault();
+    resetState();
+  }
+}
+
 async function main() {
   await init();
   els.deck.value = examples.sum;
@@ -799,6 +828,7 @@ async function main() {
   els.step.addEventListener("click", executeStep);
   els.run.addEventListener("click", runUntilStop);
   els.reset.addEventListener("click", resetState);
+  document.addEventListener("keydown", handleHotkey);
   els.loadSum.addEventListener("click", () => {
     els.deck.value = examples.sum;
     resetState();
