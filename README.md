@@ -60,7 +60,11 @@ let result_json = analytical_engine::step_instruction_json("N 12", &state_json)?
 The `site/` directory contains a static browser visualizer that executes cards
 one at a time through the WASM build and shows the state difference after each
 instruction.  It also shows the mechanism trace for the last executed card,
-including active subsystems and compact decimal wheel snapshots.
+including active subsystems and compact decimal wheel snapshots.  The trace
+diagrams combine generated schematic mechanism plates with deterministic SVG
+overlays for the current card, wheel values, axes, and card-chain motion; the
+plates are explanatory aids, not claims of exact reconstruction from surviving
+Babbage drawings.
 
 The public GitHub Pages deployment is:
 

@@ -179,9 +179,12 @@ pub struct MechanismTrace {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MechanismTick {
     pub tick: usize,
+    pub kind: String,
     pub station: String,
     pub action: String,
     pub detail: String,
+    pub before_pointer: isize,
+    pub after_pointer: isize,
     pub active: Vec<String>,
     pub wheels: Vec<WheelSnapshot>,
 }
@@ -693,12 +696,14 @@ fn build_mechanism_trace(
     after: &ProgramState,
     advance: &str,
 ) -> MechanismTrace {
-    let mut builder = MechanismBuilder::new(card_mechanism_summary(card));
+    let mut builder =
+        MechanismBuilder::new(card_mechanism_summary(card), before.pointer, after.pointer);
     builder.push(
+        "reader",
         "Card reader",
         "Read punched card",
         format!(
-            "Card {} presents `{}` to the reading prism.",
+            "Card {} presents `{}` to the card-reader feeler array.",
             before.pointer, card
         ),
         ["reader", card_family(card)],
@@ -708,6 +713,7 @@ fn build_mechanism_trace(
     match card {
         Card::Number(value) => {
             builder.push(
+                "number_reader",
                 "Number cards",
                 "Set number reader",
                 format!("Decimal constant {value} is held on the number-reader axis."),
@@ -717,6 +723,7 @@ fn build_mechanism_trace(
         }
         Card::Operation(operation) => {
             builder.push(
+                "operation_barrel",
                 "Operation barrel",
                 "Select mill program",
                 format!(
@@ -729,6 +736,7 @@ fn build_mechanism_trace(
         }
         Card::Variable(VariableTransfer::NumberToStore { column }) => {
             builder.push(
+                "store_ingress",
                 "Store ingress",
                 "Write number into store",
                 format!(
@@ -745,6 +753,7 @@ fn build_mechanism_trace(
             erase,
         }) => {
             builder.push(
+                "store_to_mill",
                 "Store to mill axis",
                 "Couple store column to ingress",
                 format!(
@@ -763,6 +772,7 @@ fn build_mechanism_trace(
 
             if matches!(axis, IngressAxis::Second) {
                 builder.push(
+                    "mill",
                     "Mill figure wheels",
                     "Run selected arithmetic barrel",
                     arithmetic_detail(&before.machine, &after.machine),
@@ -770,6 +780,7 @@ fn build_mechanism_trace(
                     mill_wheels(&after.machine),
                 );
                 builder.push(
+                    "run_up",
                     "Run-up lever",
                     if after.machine.mill.run_up {
                         "Lever raised"
@@ -784,6 +795,7 @@ fn build_mechanism_trace(
         }
         Card::Variable(VariableTransfer::MillToStore { axis, column }) => {
             builder.push(
+                "mill_to_store",
                 "Mill egress axis",
                 "Copy result into store",
                 format!(
@@ -797,15 +809,17 @@ fn build_mechanism_trace(
         }
         Card::Directive(Directive::Jump(offset)) => {
             builder.push(
-                "Directive prism",
+                "directive",
+                "Directive card",
                 "Move card chain",
-                format!("Directive barrel commands a relative movement of {offset:+} cards."),
+                format!("Directive control commands a relative movement of {offset:+} cards."),
                 ["directive", "card-chain"],
                 Vec::new(),
             );
         }
         Card::Directive(Directive::JumpIfRunUp(offset)) => {
             builder.push(
+                "run_up_feeler",
                 "Run-up feeler",
                 "Test run-up lever",
                 format!(
@@ -827,6 +841,7 @@ fn build_mechanism_trace(
         }
         Card::Directive(Directive::JumpUnlessRunUp(offset)) => {
             builder.push(
+                "run_up_feeler",
                 "Run-up feeler",
                 "Test run-up lever",
                 format!(
@@ -848,6 +863,7 @@ fn build_mechanism_trace(
         }
         Card::Directive(Directive::Halt) => {
             builder.push(
+                "stopping_lever",
                 "Stopping lever",
                 "Disengage drive",
                 "The halt card arrests card-chain motion after this crank turn.",
@@ -857,6 +873,7 @@ fn build_mechanism_trace(
         }
         Card::Print(column) => {
             builder.push(
+                "output",
                 "Output apparatus",
                 "Impress result",
                 format!(
@@ -870,6 +887,7 @@ fn build_mechanism_trace(
     }
 
     builder.push(
+        "card_chain",
         "Card chain",
         "Advance chain",
         format!(
@@ -885,19 +903,24 @@ fn build_mechanism_trace(
 
 struct MechanismBuilder {
     summary: String,
+    before_pointer: isize,
+    after_pointer: isize,
     ticks: Vec<MechanismTick>,
 }
 
 impl MechanismBuilder {
-    fn new(summary: impl Into<String>) -> Self {
+    fn new(summary: impl Into<String>, before_pointer: isize, after_pointer: isize) -> Self {
         Self {
             summary: summary.into(),
+            before_pointer,
+            after_pointer,
             ticks: Vec::new(),
         }
     }
 
     fn push<const N: usize>(
         &mut self,
+        kind: impl Into<String>,
         station: impl Into<String>,
         action: impl Into<String>,
         detail: impl Into<String>,
@@ -906,9 +929,12 @@ impl MechanismBuilder {
     ) {
         self.ticks.push(MechanismTick {
             tick: self.ticks.len() + 1,
+            kind: kind.into(),
             station: station.into(),
             action: action.into(),
             detail: detail.into(),
+            before_pointer: self.before_pointer,
+            after_pointer: self.after_pointer,
             active: active.into_iter().map(str::to_string).collect(),
             wheels,
         });
@@ -1736,7 +1762,11 @@ mod tests {
 
         assert!(result.state.halted);
         assert_eq!(result.mechanism.ticks.len(), 3);
+        assert_eq!(result.mechanism.ticks[0].kind, "reader");
         assert_eq!(result.mechanism.ticks[0].station, "Card reader");
+        assert_eq!(result.mechanism.ticks[0].before_pointer, 9);
+        assert_eq!(result.mechanism.ticks[0].after_pointer, 9);
+        assert_eq!(result.mechanism.ticks[1].kind, "stopping_lever");
         assert_eq!(result.mechanism.ticks[1].station, "Stopping lever");
         assert_eq!(result.state.machine.output, vec!["5"]);
         assert_eq!(
